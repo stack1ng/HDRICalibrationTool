@@ -31,6 +31,8 @@ use projection_adjustment::projection_adjustment;
 use resize::resize;
 use vignetting_effect_correction::vignetting_effect_correction;
 
+use crate::vendored_binaries::vendored_working_dir;
+
 // Used to print out debug information
 pub const DEBUG: bool = true;
 
@@ -45,8 +47,23 @@ pub struct ConfigSettings {
 }
 
 fn invoke_radiance(config_settings: &ConfigSettings, binary_name: &str) -> Command {
-    let mut cmd = Command::new(config_settings.radiance_path.join(binary_name));
+    let radiance_binary_path = config_settings.radiance_path.join("bin");
+    let mut cmd = Command::new(radiance_binary_path.join(binary_name));
     cmd.current_dir(&config_settings.radiance_path);
+
+    // Set the PATH environment variable for the child tool invocations
+    // Windows separates directory entries in system path with ';', Linux and MacOS use ':'
+    cmd.env(
+        "PATH",
+        format!(
+            "{}{}{}",
+            radiance_binary_path.to_string_lossy(),
+            if cfg!(windows) { ";" } else { ":" },
+            std::env::var("PATH").unwrap_or_default()
+        ),
+    );
+    cmd.env("RAYPATH", config_settings.radiance_path.join("lib"));
+
     cmd
 }
 
@@ -185,6 +202,11 @@ pub async fn pipeline(
         output_path: Path::new(&output_path).to_owned(),
         temp_path: Path::new(&output_path).join("tmp").to_owned(), // Temp directory is located in output directory
     };
+
+    if config_settings.radiance_path.as_os_str().is_empty() {
+        // temporarily hardcode macos path for my development environment
+        config_settings.radiance_path = vendored_working_dir().join("macos/radiance");
+    }
 
     // Add arguments for falsecolor2 to luminance arguments struct
     let luminance_args = LuminanceArgs {
