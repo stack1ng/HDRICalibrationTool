@@ -30,12 +30,6 @@ const Initialization: React.FC = () => {
 				if (DEBUG) {
 					console.log("OS platform successfully queried:", platform);
 				}
-				// Default Radiance path for macOS and Linux
-				let radianceDefaultPath = "/usr/local/radiance/bin";
-				// If platform is windows, update default Radiance path
-				if (osPlatform === "windows") {
-					radianceDefaultPath = "C:\\Radiance\\bin";
-				}
 				// Get the saved paths to binaries and update settings
 				const contents = await invoke<string>("read_binary_paths", {});
 				let contentsObject;
