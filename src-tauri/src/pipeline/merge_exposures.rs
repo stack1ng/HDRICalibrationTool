@@ -63,14 +63,14 @@ pub fn merge_exposures(
         let dcraw_emu_build_working_directory = if cfg!(target_os = "macos") {
             if cfg!(debug_assertions) {
                 // macOS dev mode
-                cur_exe.join("binaries")
+                cur_exe.join("vendor")
             } else {
                 // macOS release mode (inside .app bundle)
-                cur_exe.join("../Resources/binaries")
+                cur_exe.join("../Resources/vendor")
             }
         } else {
             // Linux and Windows
-            cur_exe.join("binaries")
+            cur_exe.join("vendor")
         };
 
         let mut index = 1;

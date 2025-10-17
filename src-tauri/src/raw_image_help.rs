@@ -9,6 +9,8 @@ use tauri_plugin_shell::ShellExt;
 
 use tauri::Manager;
 
+const VENDOR_DIR: &str = "vendor";
+
 /// Converts raw image into .tiff image for front end use.
 #[tauri::command]
 pub async fn convert_raw_img(
@@ -43,14 +45,14 @@ pub async fn convert_raw_img(
     let dcraw_emu_build_working_directory = if cfg!(target_os = "macos") {
         if cfg!(debug_assertions) {
             // macOS dev mode
-            cur_exe.join("binaries")
+            cur_exe.join(VENDOR_DIR)
         } else {
             // macOS release mode (inside .app bundle)
-            cur_exe.join("../Resources/binaries")
+            cur_exe.join("../Resources/".to_string() + VENDOR_DIR)
         }
     } else {
         // Linux and Windows
-        cur_exe.join("binaries")
+        cur_exe.join(VENDOR_DIR)
     };
 
     let mut cmd: Command;
