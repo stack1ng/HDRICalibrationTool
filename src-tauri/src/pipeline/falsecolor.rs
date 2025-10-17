@@ -77,18 +77,6 @@ pub fn falsecolor(
         return Err("pipeline: falsecolor: could not find PATH environment variable.".into());
     }
 
-    // Set the PATH environment variable for the child process
-    // Windows separates directory entries in system path with ';', Linux and MacOS use ':'
-    command.env(
-        "PATH",
-        format!(
-            "{}{}{}",
-            config_settings.radiance_path.to_string_lossy(),
-            path_separator(),
-            env_var.unwrap()
-        ),
-    );
-
     // Add arguments
     if luminance_args.scale_label != "" {
         command.args([
