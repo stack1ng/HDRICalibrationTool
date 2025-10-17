@@ -9,10 +9,10 @@
 use crate::pipeline::DEBUG;
 use std::env;
 use std::fs::File;
-use std::process::Command;
+// removed unused Command import; we use invoke_radiance helper instead
 use std::process::Stdio;
 
-use super::ConfigSettings;
+use super::{ConfigSettings, invoke_radiance};
 use super::LuminanceArgs;
 
 // Allow radiance to access helvet.fnt
@@ -67,7 +67,7 @@ pub fn falsecolor(
     }
 
     // Create command to run falsecolor from the Radiance path
-    let mut command = Command::new(config_settings.radiance_path.join("falsecolor"));
+    let mut command = invoke_radiance(config_settings, "falsecolor");
 
     // Provide path to radiance binaries by modifying system path (PATH env variable) for child process
     // The falsecolor tool relies on other Radiance utilities like pcomb, so we need to make sure

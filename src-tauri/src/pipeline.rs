@@ -10,7 +10,6 @@ mod resize;
 mod vignetting_effect_correction;
 
 use tauri::Emitter;
-use tauri_plugin_shell::ShellExt;
 mod falsecolor;
 
 use std::{
@@ -45,14 +44,10 @@ pub struct ConfigSettings {
     temp_path: PathBuf, // used to store temp path in output dir, i.e. "output_path/tmp/"
 }
 
-fn invoke_radiance(app: &tauri::AppHandle, config_settings: &ConfigSettings, binary_name: &str) -> Command {
-    let mut cmd: Command = app
-        .shell()
-        .command(config_settings.radiance_path.join("bin").join(binary_name))
-        .into();
+fn invoke_radiance(config_settings: &ConfigSettings, binary_name: &str) -> Command {
+    let mut cmd = Command::new(config_settings.radiance_path.join(binary_name));
     cmd.current_dir(&config_settings.radiance_path);
-    
-    return cmd;
+    cmd
 }
 
 // Helper functon to emit progress events
@@ -209,7 +204,7 @@ pub async fn pipeline(
     //Define total steps for progress bar (adjust this count as needed)
     let total_steps: usize = if is_directory { 5 } else { 5 };
 
-    let mut current_step: usize = 0;
+    let current_step: usize = 0;
     emit_progress(&app, current_step, total_steps)?; // Initial progress (0%)
 
     let mut return_path: PathBuf = PathBuf::new();
@@ -275,7 +270,7 @@ pub async fn pipeline(
                 .unwrap_or_default()
                 .to_string_lossy();
 
-            let mut output_file_name = config_settings
+            let output_file_name = config_settings
                 .output_path
                 .join(format!("{}_{}.hdr", base_name, datetime));
 
