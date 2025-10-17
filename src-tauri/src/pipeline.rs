@@ -10,12 +10,13 @@ mod resize;
 mod vignetting_effect_correction;
 
 use tauri::Emitter;
+use tauri_plugin_shell::ShellExt;
 mod falsecolor;
 
 use std::{
     fs::{self, copy, create_dir_all},
     io,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf}, process::Command,
 };
 
 use chrono::prelude::*;
@@ -42,6 +43,16 @@ pub struct ConfigSettings {
     dcraw_emu_path: PathBuf,
     output_path: PathBuf,
     temp_path: PathBuf, // used to store temp path in output dir, i.e. "output_path/tmp/"
+}
+
+fn invoke_radiance(app: &tauri::AppHandle, config_settings: &ConfigSettings, binary_name: &str) -> Command {
+    let mut cmd: Command = app
+        .shell()
+        .command(config_settings.radiance_path.join("bin").join(binary_name))
+        .into();
+    cmd.current_dir(&config_settings.radiance_path);
+    
+    return cmd;
 }
 
 // Helper functon to emit progress events
