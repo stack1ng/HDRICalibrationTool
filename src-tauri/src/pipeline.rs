@@ -204,8 +204,7 @@ pub async fn pipeline(
     };
 
     if config_settings.radiance_path.as_os_str().is_empty() {
-        // temporarily hardcode macos path for my development environment
-        config_settings.radiance_path = vendored_working_dir().join("macos/radiance");
+        config_settings.radiance_path = vendored_working_dir().join(std::env::consts::OS).join("radiance");
     }
 
     // Add arguments for falsecolor2 to luminance arguments struct
