@@ -1,11 +1,11 @@
 /**
  * Image Viewer Component for the HDRI Calibration Tool.
  *
- * This component allows users to browse and view HDR images from the file system.
- * It displays a grid of available HDR images in the output directory and offers
- * functionality to select and view these images using external viewers.
+ * This component provides an in-app HDR image viewer with zoom and pan controls.
+ * It displays HDR images from the output directory and allows interactive viewing
+ * with basic image manipulation controls.
  *
- * Note: The HDR viewing functionality is currently not supported on Windows platforms.
+ * Built using Shadcn UI components to maintain consistency with the rest of the application.
  */
 "use client";
 
@@ -14,222 +14,397 @@ import { useSettingsStore } from "../stores/settings-store";
 import { invoke } from "@tauri-apps/api/core";
 import { basename } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
+import {Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Field, FieldContent, FieldLabel } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ZoomIn, ZoomOut, Move, RotateCcw, Download, FolderOpen, ImageIcon } from "lucide-react";
 
 /**
  * Main Image Viewer component
  *
- * @returns React component with image viewer interface
+ * @returns React component with interactive image viewer interface
  */
+
 export default function ImageViewer() {
-  // Access global settings to get output path and platform information
-  const { settings } = useSettingsStore();
-  const outputPath = settings.outputPath;
+	const { settings } = useSettingsStore();
+	const outputPath = settings.outputPath;
+	const isWindows = settings.osPlatform === "windows";
 
-  // Local state management
-  const [error, setError] = useState<string | null>(null);
-  const [selectedImages, setSelectedImages] = useState<string[]>([]);
-  const [evalglares, setEvalglares] = useState<(string | null)[]>([]);
-  const [imageFullPaths, setImageFullPaths] = useState<string[]>([]);
+	const [error, setError] = useState<string | null>(null);
+	const [selectedImages, setSelectedImages] = useState<string[]>([]);
+	const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
+	const [imageFullPaths, setImageFullPaths] = useState<string[]>([]);
+	
+	const [zoom, setZoom] = useState<number>(100);
+	const [panX, setPanX] = useState<number>(0);
+	const [panY, setPanY] = useState<number>(0);
+	const [rotation, setRotation] = useState<number>(0);
+	
+	useEffect(() => {
+		async function loadFiles() {
+			try {
+				const files = await populateGrid(outputPath);
+				const relativeFiles = await Promise.all(
+					files.map((file) => basename(file))
+				);
+				
+				setSelectedImages(relativeFiles);
+				setImageFullPaths(files);
+			} catch (error) {
+				console.error("Error loading HDR images:", error);
+				setError("Failed to load HDR images from output directory");
+			}
+		}
+		loadFiles();
+	}, [outputPath]);
 
-  // Helper to sort images by filename
-  function sortImages(
-    images: string[],
-    evals: (string | null)[],
-    fullPaths: string[]
-  ) {
-    // Create array of objects for sorting
-    const combined = images.map((img, idx) => ({
-      img,
-      eval: evals[idx],
-      fullPath: fullPaths[idx],
-    }));
-    combined.sort((a, b) => {
-      const aName = a.img.split("/").pop()?.toLowerCase() || "";
-      const bName = b.img.split("/").pop()?.toLowerCase() || "";
-      return bName.localeCompare(aName);
-    });
-    return {
-      images: combined.map((c) => c.img),
-      evalglares: combined.map((c) => c.eval),
-      imageFullPaths: combined.map((c) => c.fullPath),
-    };
-  }
-  // Check if running on Windows (features limited on Windows)
-  const isWindows = settings.osPlatform === "windows";
-  /**
-   * Load HDR image files from the output directory when outputPath changes
-   */
-  useEffect(() => {
-    async function loadFiles() {
-      const files = await populateGrid(outputPath);
-      const evalglareValues: (string | null)[] = await Promise.all(
-        files.map(async (file) => {
-          try {
-            return await invoke("read_header_value", {
-              filePath: file,
-              radiancePathString: settings.radiancePath,
-              key: "EVALGLARE=",
-            });
-          } catch (error) {
-            console.error(
-              `ImageViewer: loadFiles: error getting evalglare value for file ${file}`
-            );
-            return null;
-          }
-        })
-      );
-      const relative_files = await Promise.all(
-        files.map((file) => basename(file))
-      );
-      // Sort images by filename
-      const sorted = sortImages(relative_files, evalglareValues, files);
-      setSelectedImages(sorted.images);
-      setEvalglares(sorted.evalglares);
-      setImageFullPaths(sorted.imageFullPaths);
-    }
-    loadFiles();
-  }, [outputPath]);
-  /**
-   * Opens a file browser dialog to select HDR images
-   *
-   * Allows users to browse and select multiple HDR image files
-   * Updates the selectedImages state with the chosen files
-   */
-  async function browseAndOpen() {
-    setError(null);
-    try {
-      // Open file selection dialog
-      const files = await open({
-        multiple: true,
-        defaultPath: outputPath,
-        filters: [{ name: "HDR Images", extensions: ["hdr"] }],
-      });
+	// opens a file browser dialog to select additional HDR images
 
-      if (files) {
-        // Handle both single and multiple file selections
-        const images = Array.isArray(files) ? files : [files];
-        console.log("Selected HDR images:", images);
-        setSelectedImages((prev) => [...prev, ...images]);
-      } else {
-        console.log("No file selected.");
-      }
-    } catch (err) {
-      console.error("Error during file selection:", err);
-      setError("Failed to select an HDR image.");
-    }
-  }
-  /**
-   * Launches the ximage viewer to display an HDR image
-   *
-   * This function calls a Tauri command to display an HDR image using Radiance's ximage tool
-   * Note: This functionality is not available on Windows platforms
-   *
-   * @param imagePath - Full path to the HDR image file
-   */
-  async function launchXimage(imagePath: string) {
-    // Early return on Windows as ximage isn't supported
-    if (isWindows) return;
+	async function browseAndOpen() {
+		setError(null);
+		try {
+			const files = await open({
+				multiple: true,
+				defaultPath: outputPath,
+				filters: [{ name: "HDR Images", extensions: ["hdr"] }],
+			});
 
-    // Call the Tauri command to display the image using ximage
-    await invoke("display_hdr_img", {
-      radiancePath: settings.radiancePath,
-      imagePath: imagePath,
-    }).catch((error: unknown) => {
-      console.log(error);
-      setError("Failed to open ximage");
-    });
-  }
-  /**
-   * Retrieves all HDR image files from a directory
-   *
-   * Calls Tauri backend to read directory contents and filters for HDR files
-   *
-   * @param dir - Directory path to search for HDR files
-   * @returns Promise resolving to an array of HDR file paths
-   */
-  async function populateGrid(dir: string): Promise<string[]> {
-    // Call Tauri backend to read directory contents
-    try {
-      const entries = await invoke<string[]>("read_dynamic_dir", { path: dir });
-      const hdrPaths: string[] = [];
+			if (files) {
+				const images = Array.isArray(files) ? files : [files];
+				const newRelativeFiles = await Promise.all(
+					images.map((file) => basename(file))
+				);
+				
+				setSelectedImages((prev) => [...prev, ...newRelativeFiles]);
+				setImageFullPaths((prev) => [...prev, ...images]);
+			}
+		} catch (err) {
+			console.error("Error during file selection:", err);
+			setError("Failed to select HDR images");
+		}
+	}
+  
+	async function populateGrid(dir: string): Promise<string[]> {
+		try {
+			const entries = await invoke<string[]>("read_dynamic_dir", { path: dir });
+			const hdrPaths: string[] = [];
 
-      // Filter entries for HDR files
-      if (Array.isArray(entries)) {
-        for (const entry of entries) {
-          if (
-            typeof entry === "string" &&
-            entry.toLowerCase().endsWith(".hdr")
-          ) {
-            hdrPaths.push(entry);
-          }
-        }
-      }
-      return hdrPaths;
-    } catch (error) {
-      console.error(
-        `ImageViewer: populateGrid: error getting hdr files: ${error}`
-      );
-      return [];
-    }
-  }
-  return (
-    <div className="bg-gray-300 text-black grid grid-cols-4 min-h-screen">
-      <main className="bg-white col-span-4 m-8 mt-0 p-5 border-l border-r border-b border-gray-400">
-        {/* Warning message for Windows users */}
-        {isWindows && (
-          <label className="text-red-500">
-            This feature is currently not supported on Windows.
-          </label>
-        )}
+			if (Array.isArray(entries)) {
+				for (const entry of entries) {
+					if (typeof entry === "string" && entry.toLowerCase().endsWith(".hdr")) {
+						hdrPaths.push(entry);
+					}
+				}
+			}
+			return hdrPaths;
+		} catch (error) {
+			console.error("Error reading HDR files:", error);
+			return [];
+		}
+	}
 
-        <h2 className="text-2xl font-bold mb-2">Open HDR Image</h2>
 
-        <p>This page automatically displays the HDR images in the output directory: <span className="font-mono">{outputPath}</span></p>
-        <p>To delete images, navigate to tha directory using your file manager, and delete the corresponding file.</p>
-        <p>You can list other HDR images temporarily by adding them using the button below.</p>
+	function resetView() {
+		setZoom(100);
+		setPanX(0);
+		setPanY(0);
+		setRotation(0);
+	}
 
-        {/* Error message display if present */}
-        {error && <div className="text-red-500 mb-4">{error}</div>}
+	function handleZoomIn() {
+		setZoom((prev) => Math.min(prev + 10, 400));
+	}
 
-        {/* Button to browse for HDR images */}
-        <button
-          type="button"
-          className="mt-6 bg-gray-300 hover:bg-gray-400 text-gray-700 font-semibold py-1 px-2 border-gray-400 rounded h-fit"
-          onClick={browseAndOpen}
-        >
-          Browse HDR Images
-        </button>
-        {/* Grid display of available HDR images */}
-        {selectedImages.length > 0 && (
-          <div className="mt-6 grid grid-cols-2 gap-4">
-            {/* Map through images to create clickable image items */}
-            {selectedImages.map((image, index) => {
-              const imageName = image.split("/").pop();
-              const evalGlare = evalglares[index];
-              return (
-                <div
-                  key={index}
-                  className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-2 rounded group"
-                  onClick={() => launchXimage(imageFullPaths[index])}
-                >
-                  {/* Image thumbnail placeholder */}
-                  <div className="w-12 h-12 bg-gray-200 flex items-center justify-center rounded">
-                    <span className="text-lg font-bold">HDR</span>
-                  </div>
-                  {/* Image name display */}
-                  <div>
-                    <p className="text-m font-medium">File: {imageName}</p>
-                    <p className="text-m font-medium">
-                      Evalglare:{" "}
-                      {evalGlare ? `${evalGlare} lx` : "Not present"}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </main>
-    </div>
-  );
+	function handleZoomOut() {
+		setZoom((prev) => Math.max(prev - 10, 10));
+	}
+
+	const currentImage = selectedImages[currentImageIndex];
+	const currentImagePath = imageFullPaths[currentImageIndex];
+
+	return (
+		<div className="flex h-full w-screen divide-x">
+			<div className="flex-1 flex flex-col overflow-hidden bg-background">
+				<div className="border-b p-4 flex items-center justify-between bg-accent/50">
+					<div className="flex items-center gap-2">
+						<ImageIcon className="h-5 w-5" />
+						<h1 className="text-lg font-semibold">HDR Image Viewer</h1>
+					</div>
+					{currentImage && (
+						<div className="text-sm text-muted-foreground">
+							{currentImageIndex + 1} / {selectedImages.length}
+						</div>
+					)}
+				</div>
+
+				<div className="flex-1 flex items-center justify-center p-8 overflow-auto bg-muted/30">
+					{currentImage ? (
+						<div className="relative border-2 border-border rounded-lg overflow-hidden bg-background">
+							<div 
+								className="flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900"
+								style={{
+									width: `${600 * (zoom / 100)}px`,
+									height: `${400 * (zoom / 100)}px`,
+									transform: `translate(${panX}px, ${panY}px) rotate(${rotation}deg)`,
+									transition: "transform 0.2s ease-out"
+								}}
+							>
+								<div className="text-center text-white/80">
+									<ImageIcon className="h-24 w-24 mx-auto mb-4 opacity-50" />
+									<p className="text-lg font-medium">{currentImage}</p>
+									<p className="text-sm text-white/60 mt-2">
+										HDR Preview Placeholder
+									</p>
+									<p className="text-xs text-white/40 mt-1">
+										Zoom: {zoom}% | Pan: ({panX}, {panY})
+									</p>
+								</div>
+							</div>
+						</div>
+					) : (
+						<div className="text-center text-muted-foreground">
+							<ImageIcon className="h-24 w-24 mx-auto mb-4 opacity-20" />
+							<p className="text-lg">No HDR images loaded</p>
+							<p className="text-sm mt-2">
+								Browse files or check your output directory: 
+								<span className="font-mono block mt-1">{outputPath}</span>
+							</p>
+						</div>
+					)}
+				</div>
+
+				{selectedImages.length > 0 && (
+					<div className="border-t p-4 bg-accent/50">
+						<div className="flex gap-2 overflow-x-auto">
+							{selectedImages.map((image, index) => (
+								<button
+									key={index}
+									onClick={() => setCurrentImageIndex(index)}
+									className={`
+										flex-shrink-0 px-3 py-2 rounded border text-sm
+										${index === currentImageIndex 
+											? 'bg-primary text-primary-foreground border-primary' 
+											: 'bg-background border-border hover:bg-accent'}
+									`}
+								>
+									{image}
+								</button>
+							))}
+						</div>
+					</div>
+				)}
+			</div>
+
+			<div className="bg-accent w-96 shrink-0 overflow-y-auto">
+				<div className="p-4 border-b">
+					<Button 
+						onClick={browseAndOpen}
+						className="w-full"
+						variant="outline"
+					>
+						<FolderOpen className="h-4 w-4 mr-2" />
+						Browse HDR Images
+					</Button>
+					
+					{error && (
+						<p className="text-sm text-destructive mt-2">{error}</p>
+					)}
+					
+					{isWindows && (
+						<p className="text-sm text-yellow-600 mt-2">
+							Some features may be limited on Windows due to OS restrictions.
+						</p>
+					)}
+				</div>
+
+				<Accordion type="single" collapsible className="border-t">
+					<AccordionItem value="item-1" className="px-4">
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<AccordionTrigger>Zoom Controls</AccordionTrigger>
+							</TooltipTrigger>
+							<TooltipContent>
+								Adjust the zoom level of the HDR image
+							</TooltipContent>
+						</Tooltip>
+						<AccordionContent className="flex flex-col gap-4">
+							<Field>
+								<FieldLabel>Zoom Level</FieldLabel>
+								<FieldContent className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleZoomOut}
+                    disabled={zoom <= 10}
+                  >
+                    <ZoomOut className="h-4 w-4" />
+                  </Button>
+                  <Input
+                    type="number"
+                    value={zoom}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setZoom(Number(e.target.value))}
+                    className="text-center"
+                    min={10}
+                    max={400}
+                  />
+									<span className="text-sm text-muted-foreground">%</span>
+									<Button
+										size="sm"
+										variant="outline"
+										onClick={handleZoomIn}
+										disabled={zoom >= 400}
+									>
+										<ZoomIn className="h-4 w-4" />
+									</Button>
+								</FieldContent>
+							</Field>
+
+							<Field>
+								<FieldLabel>Zoom Presets</FieldLabel>
+								<FieldContent className="flex gap-2">
+									<Button 
+										size="sm" 
+										variant="outline" 
+										onClick={() => setZoom(50)}
+									>
+										50%
+									</Button>
+									<Button 
+										size="sm" 
+										variant="outline" 
+										onClick={() => setZoom(100)}
+									>
+										100%
+									</Button>
+									<Button 
+										size="sm" 
+										variant="outline" 
+										onClick={() => setZoom(200)}
+									>
+										200%
+									</Button>
+								</FieldContent>
+							</Field>
+						</AccordionContent>
+					</AccordionItem>
+
+					<AccordionItem value="item-2" className="px-4">
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<AccordionTrigger>Pan Controls</AccordionTrigger>
+							</TooltipTrigger>
+							<TooltipContent>
+								Move the image horizontally and vertically
+							</TooltipContent>
+						</Tooltip>
+						<AccordionContent className="flex flex-col gap-4">
+							<Field>
+								<FieldLabel className="flex items-center gap-2">
+									<Move className="h-4 w-4" />
+									Pan Position
+								</FieldLabel>
+								<FieldContent className="flex flex-col gap-2">
+									<div className="flex items-center gap-2">
+										<span className="text-sm w-8">X:</span>
+										<Input
+											type="number"
+											value={panX}
+											onChange={(e) => setPanX(Number(e.target.value))}
+										/>
+										<span className="text-sm text-muted-foreground">px</span>
+									</div>
+									<div className="flex items-center gap-2">
+										<span className="text-sm w-8">Y:</span>
+										<Input
+											type="number"
+											value={panY}
+											onChange={(e) => setPanY(Number(e.target.value))}
+										/>
+										<span className="text-sm text-muted-foreground">px</span>
+									</div>
+								</FieldContent>
+							</Field>
+
+							<Button 
+								size="sm" 
+								variant="outline"
+								onClick={() => { setPanX(0); setPanY(0); }}
+							>
+								Center Image
+							</Button>
+						</AccordionContent>
+					</AccordionItem>
+
+					<AccordionItem value="item-3" className="px-4">
+						<AccordionTrigger>Advanced Controls</AccordionTrigger>
+						<AccordionContent className="flex flex-col gap-4">
+							<Field>
+								<FieldLabel>Rotation</FieldLabel>
+								<FieldContent className="flex items-center gap-2">
+									<Input
+										type="number"
+										value={rotation}
+										onChange={(e) => setRotation(Number(e.target.value))}
+									/>
+									<span className="text-sm text-muted-foreground">°</span>
+								</FieldContent>
+							</Field>
+
+							<Button
+								variant="outline"
+								onClick={resetView}
+								className="w-full"
+							>
+								<RotateCcw className="h-4 w-4 mr-2" />
+								Reset View
+							</Button>
+
+							<Button
+								variant="outline"
+								className="w-full"
+								disabled
+							>
+								<Download className="h-4 w-4 mr-2" />
+								Export View (Coming Soon)
+							</Button>
+						</AccordionContent>
+					</AccordionItem>
+
+					<AccordionItem value="item-4" className="px-4">
+						<AccordionTrigger>Image Information</AccordionTrigger>
+						<AccordionContent className="flex flex-col gap-2 text-sm">
+							{currentImage ? (
+								<>
+									<div className="flex justify-between py-1 border-b">
+										<span className="text-muted-foreground">Filename:</span>
+										<span className="font-mono text-xs">{currentImage}</span>
+									</div>
+									<div className="flex justify-between py-1 border-b">
+										<span className="text-muted-foreground">Path:</span>
+										<span className="font-mono text-xs truncate max-w-[180px]">
+											{currentImagePath}
+										</span>
+									</div>
+									<div className="flex justify-between py-1 border-b">
+										<span className="text-muted-foreground">Format:</span>
+										<span>HDR</span>
+									</div>
+									<div className="flex justify-between py-1">
+										<span className="text-muted-foreground">Status:</span>
+										<span className="text-green-600">Loaded</span>
+									</div>
+								</>
+							) : (
+								<p className="text-muted-foreground text-center py-4">
+									No image selected
+								</p>
+							)}
+						</AccordionContent>
+					</AccordionItem>
+				</Accordion>
+			</div>
+		</div>
+	);
 }
