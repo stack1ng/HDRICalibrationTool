@@ -5,8 +5,8 @@ import {
 	useController,
 	RegisterOptions,
 } from "react-hook-form";
-import { Field, FieldContent } from "./field";
-import { FieldError } from "./field";
+import { Field, FieldContent } from "../field";
+import { FieldError } from "../field";
 import {
 	TauriDropzone,
 	DropzoneChildrenProps,
@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/context-menu";
 import { DialogFilter, open } from "@tauri-apps/plugin-dialog";
 import { DirEntry, readDir, stat } from "@tauri-apps/plugin-fs";
-import { ImageSet, ImageSetPreview } from "./image-set-preview";
+import { ImageSet, ImageSetPreview } from "../image-set-preview";
+import { onDrop as onDropHandler } from "./onDrop";
 
 type FileMatrixFieldName<T extends FieldValues> = FieldPathByValue<
 	T,
@@ -47,7 +48,7 @@ const imageFilters: DialogFilter[] = [
 	{ name: "Images", extensions: imageFileExtensions },
 ];
 
-type FullDirEntry = DirEntry & {
+export type FullDirEntry = DirEntry & {
 	path: string;
 };
 
@@ -78,41 +79,12 @@ export function ImageMatrixInput<
 
 	const onDrop = useCallback(
 		async (files: string[]) => {
-			if (!files.length) return;
-
-			// group by top-level directory name (first segment of path)
-			const groups = new Map<string, ImageSet>();
-			for (const rawPath of files) {
-				console.log("rawPath", rawPath);
-				const fileStats = await stat(rawPath);
-				const { isFile } = fileStats;
-				const fileDir = isFile ? path.dirname(rawPath) : rawPath;
-				const groupingDir = path.basename(fileDir);
-
-				const arr = groups.get(groupingDir) ?? {
-					name: groupingDir,
-					files: [],
-				};
-				let pendingEntries: FullDirEntry[] = [];
-				if (isFile) {
-					pendingEntries = [
-						{ ...fileStats, name: path.basename(rawPath), path: rawPath },
-					];
-				} else {
-					pendingEntries = (await readDir(rawPath)).map((e) => ({
-						...e,
-						path: path.join(rawPath, e.name),
-					}));
-				}
-				arr.files.push(
-					...filterForAcceptance(pendingEntries).map((e) => e.path),
-				);
-				groups.set(groupingDir, arr);
-			}
-
-			const newRows = Array.from(groups.values());
-			// todo: sort these by total alpha value, so we can see the images sorted from most exposed to least exposed
-			field.onChange([...(value ?? []), ...newRows]);
+			await onDropHandler(
+				value ?? [],
+				files,
+				filterForAcceptance,
+				field.onChange,
+			);
 		},
 		[field, value],
 	);

@@ -43,7 +43,7 @@ import {
 	pipelineConfig,
 	PipelineConfigProvider,
 } from "./(pipeline-configuration)/config-provider";
-import { ImageMatrixInput } from "@/components/ui/image-matrix-input";
+import { ImageMatrixInput } from "@/components/ui/(image-matrix-input)/image-matrix-input";
 import { FileInput } from "@/components/ui/file-input";
 import { useMotionValue, useTransform } from "framer-motion";
 import { useMotionValueFormState } from "@/lib/useMotionValueFormState";
@@ -109,7 +109,7 @@ function normalizePipelineError(error: unknown) {
 async function writePipelineTrace(
 	input: Record<string, unknown>,
 	error: unknown,
-	outputPath: string
+	outputPath: string,
 ) {
 	const createdAt = new Date().toISOString();
 	const baseDir =
@@ -119,7 +119,7 @@ async function writePipelineTrace(
 	const safeTimestamp = createdAt.replace(/[:.]/g, "-");
 	const tracePath = await join(
 		traceDir,
-		`pipeline-trace-${safeTimestamp}.json`
+		`pipeline-trace-${safeTimestamp}.json`,
 	);
 	const trace: PipelineTrace = {
 		createdAt,
@@ -166,22 +166,22 @@ export default function Home() {
 	const centerX = useMotionValueFormState(
 		initialLensMaskX,
 		setValue,
-		"lensMask.x"
+		"lensMask.x",
 	);
 	const centerY = useMotionValueFormState(
 		initialLensMaskY,
 		setValue,
-		"lensMask.y"
+		"lensMask.y",
 	);
 
 	const radiusAjusterCenterX = useMotionValue(
-		initialLensMaskX + initialLensMaskRadius
+		initialLensMaskX + initialLensMaskRadius,
 	);
 	const radiusAjusterCenterY = useMotionValue(initialLensMaskY);
 
 	const radius = useTransform<number, number>(
 		[centerX, centerY, radiusAjusterCenterX, radiusAjusterCenterY],
-		([cx, cy, rx, ry]) => Math.sqrt((cx! - rx!) ** 2 + (cy! - ry!) ** 2)
+		([cx, cy, rx, ry]) => Math.sqrt((cx! - rx!) ** 2 + (cy! - ry!) ** 2),
 	);
 	useEffect(() => {
 		const unsub = radius.on("change", (value) => {
@@ -282,7 +282,7 @@ export default function Home() {
 									tracePath = await writePipelineTrace(
 										params,
 										error,
-										settings.outputPath
+										settings.outputPath,
 									);
 								} catch (traceError) {
 									toast.error(`Failed to write pipeline trace: ${traceError}`);
@@ -301,16 +301,16 @@ export default function Home() {
 														success: "Revealed in folder",
 														error: "Failed to reveal in folder",
 													}),
-										  }
+											}
 										: undefined,
 								});
-							}
+							},
 						);
 						console.log("invokePromise", invokePromise);
 					},
 					(errors) => {
 						console.log("form errors", errors);
-					}
+					},
 				)}
 			>
 				<ImageMatrixInput
@@ -399,7 +399,7 @@ export default function Home() {
 												return (
 													fileextension !== "jpg" && fileextension !== "jpeg"
 												);
-											})
+											}),
 										)}
 										control={control}
 										explicitOptional
